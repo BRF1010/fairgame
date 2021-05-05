@@ -61,6 +61,9 @@ import asyncio
 import aiohttp
 from aiohttp_proxy import ProxyConnector, ProxyType
 
+policy = asyncio.WindowsSelectorEventLoopPolicy()
+asyncio.set_event_loop_policy(policy)
+
 # PDP_URL = "https://smile.amazon.com/gp/product/"
 # AMAZON_DOMAIN = "www.amazon.com.au"
 # AMAZON_DOMAIN = "www.amazon.com.br"
