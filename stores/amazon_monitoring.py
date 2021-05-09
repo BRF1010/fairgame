@@ -19,6 +19,7 @@
 
 import json
 import os
+import platform
 
 import time
 import typing
@@ -61,8 +62,9 @@ import asyncio
 import aiohttp
 from aiohttp_proxy import ProxyConnector, ProxyType
 
-policy = asyncio.WindowsSelectorEventLoopPolicy()
-asyncio.set_event_loop_policy(policy)
+if platform.system() == "Windows":
+    policy = asyncio.WindowsSelectorEventLoopPolicy()
+    asyncio.set_event_loop_policy(policy)
 
 # PDP_URL = "https://smile.amazon.com/gp/product/"
 # AMAZON_DOMAIN = "www.amazon.com.au"
@@ -91,8 +93,8 @@ AMAZON_URLS = {
     "PYO_POST": "https://{domain}/gp/buy/spc/handlers/static-submit-decoupled.html/ref=ox_spc_place_order?",
 }
 
-PDP_PATH = f"/dp/"
-REALTIME_INVENTORY_PATH = f"gp/aod/ajax?asin="
+PDP_PATH = "/dp/"
+REALTIME_INVENTORY_PATH = "gp/aod/ajax?asin="
 
 CONFIG_FILE_PATH = "config/amazon_requests_config.json"
 PROXY_FILE_PATH = "config/proxies.json"
@@ -266,14 +268,16 @@ class AmazonMonitor(aiohttp.ClientSession):
                     )
                     if qualified_seller:
                         log.debug("Found an offer which meets criteria")
-                        if (time.time() > self.block_purchase_until):
+                        if time.time() > self.block_purchase_until:
                             await queue.put(qualified_seller)
                             log.debug("Offer placed in queue")
                             log.debug("Quitting monitoring task")
                             future.set_result(None)
                             return None
                         else:
-                            log.debug(f"Purchasing is blocked until {self.block_purchase_until}. It is now {time.time()}.")
+                            log.debug(
+                                f"Purchasing is blocked until {self.block_purchase_until}. It is now {time.time()}."
+                            )
             # failed to find seller. Wait a delay period then check again
             log.debug("No offers found which meet product criteria")
             await wait_timer(end_time)

@@ -90,8 +90,8 @@ AMAZON_URLS = {
     "PYO_POST": "https://{domain}/gp/buy/spc/handlers/static-submit-decoupled.html/ref=ox_spc_place_order?",
 }
 
-PDP_PATH = f"/dp/"
-REALTIME_INVENTORY_PATH = f"gp/aod/ajax?asin="
+PDP_PATH = "/dp/"
+REALTIME_INVENTORY_PATH = "gp/aod/ajax?asin="
 
 CONFIG_FILE_PATH = "config/amazon_requests_config.json"
 STORE_NAME = "Amazon"
@@ -132,9 +132,10 @@ class AmazonCheckoutHandler(BaseStoreHandler):
         self.time_interval = timer
         self.cookie_list = cookie_list
 
-        self.checkout_session: aiohttp.ClientSession = aiohttp.ClientSession()
+        self.checkout_session: aiohttp.ClientSession = aiohttp.ClientSession(
+            headers=HEADERS
+        )
 
-    #TODO make this async
     def pull_cookies(self):
         # Spawn the web browser
         self.driver = create_driver(options)
@@ -399,29 +400,21 @@ class AmazonCheckoutHandler(BaseStoreHandler):
         except Exception as e:
             log.debug(f"Other error encountered while loading page: {e}")
 
-    async def refresh_session(self, interval):
-        while True:
-            log.debug("Logging in and pulling cookies from Selenium")
-            cookies = self.pull_cookies()
-            log.debug("Cookies from Selenium:")
-            for cookie in cookies:
-                log.debug(f"{cookie}: {cookies[cookie]}")
-            session_id = cookies['session-id']
-            headers = HEADERS
-            headers['x-amz-checkout-csrf-token'] = session_id
-            session = aiohttp.ClientSession(
-                headers=headers, cookies={cookie: cookies[cookie] for cookie in cookies}
-            )
-            domain = "smile.amazon.com"
-            resp = await session.get(f"https://{domain}")
-            html_text = await resp.text()
-            save_html_response("session-get", resp.status, html_text)
-            self.checkout_session = session
-            await asyncio.sleep(interval)
-
     async def checkout_worker(self, queue: asyncio.Queue):
         log.debug("Checkout Task Started")
+        log.debug("Logging in and pulling cookies from Selenium")
+        cookies = self.pull_cookies()
+        log.debug("Cookies from Selenium:")
+        for cookie in cookies:
+            log.debug(f"{cookie}: {cookies[cookie]}")
+        if session_id := cookies.get("session-id"):
+            self.checkout_session.headers["x-amz-checkout-csrf-token"] = session_id
+        self.checkout_session.cookie_jar.update_cookies(cookies)
+        # It appears the amazon session is valid for 366 days.
         domain = "smile.amazon.com"
+        resp = await self.checkout_session.get(f"https://{domain}")
+        html_text = await resp.text()
+        save_html_response("session-get", resp.status, html_text)
         while True:
             log.debug("Checkout task waiting for item in queue")
             qualified_seller = await queue.get()
@@ -429,18 +422,19 @@ class AmazonCheckoutHandler(BaseStoreHandler):
             if not qualified_seller:
                 continue
             start_time = time.time()
-            session = self.checkout_session # grab the currently active session to use for this attempt
             TURBO_INITIATE_MAX_RETRY = 50
             retry = 0
             pid = None
             anti_csrf = None
             while (not (pid and anti_csrf)) and retry < TURBO_INITIATE_MAX_RETRY:
                 pid, anti_csrf = await turbo_initiate(
-                    s=session, qualified_seller=qualified_seller
+                    s=self.checkout_session, qualified_seller=qualified_seller
                 )
                 retry += 1
             if pid and anti_csrf:
-                if await turbo_checkout(s=session, pid=pid, anti_csrf=anti_csrf):
+                if await turbo_checkout(
+                    s=self.checkout_session, pid=pid, anti_csrf=anti_csrf
+                ):
                     log.info("Maybe completed checkout")
                     time_difference = time.time() - start_time
                     log.info(
@@ -448,13 +442,13 @@ class AmazonCheckoutHandler(BaseStoreHandler):
                     )
                     try:
                         status, text = await aio_get(
-                            session,
+                            self.checkout_session,
                             f"https://{domain}/gp/buy/thankyou/handlers/display.html?_from=cheetah&checkMFA=1&purchaseId={pid}&referrer=yield&pid={pid}&pipelineType=turbo&clientId=retailwebsite&temporaryAddToCart=1&hostPage=detail&weblab=RCX_CHECKOUT_TURBO_DESKTOP_PRIME_87783",
                         )
                         save_html_response("order-confirm", status, text)
                     except aiohttp.ClientError:
                         log.debug("could not save order confirmation page")
-                    await session.close()
+                    await self.checkout_session.close()
                     break
 
     @contextmanager
