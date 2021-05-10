@@ -282,8 +282,12 @@ class AmazonMonitor(aiohttp.ClientSession):
             log.debug("No offers found which meet product criteria")
             await wait_timer(end_time)
             end_time = time.time() + delay
+            #log.debug(f"AMAZON URL {self.item.furl.url}")
             status, response_text = await self.aio_get(url=self.item.furl.url)
             save_html_response("stock-check", status, response_text)
+            
+            #log.debug(f"ASIN {self.item.id} returned HTML status {status} using proxy {self.connector.proxy_url}")
+
             # do this after each request
             fail_counter = check_fail(status=status, fail_counter=fail_counter)
             if fail_counter == -1:
