@@ -290,7 +290,7 @@ class AmazonMonitor(aiohttp.ClientSession):
             status, response_text = await self.aio_get(url=self.item.furl.url)
             save_html_response(f"{self.item.id}_stock-check", status, response_text)
             
-            #log.debug(f"ASIN {self.item.id} returned HTML status {status} using proxy {self.connector.proxy_url}")
+            log.debug(f"ASIN {self.item.id} returned HTML status {status} using proxy {self.connector.proxy_url}")
 
             # do this after each request
             fail_counter = check_fail(status=status, fail_counter=fail_counter)
