@@ -224,8 +224,9 @@ class AmazonMonitor(aiohttp.ClientSession):
         delay = self.delay
         end_time = time.time() + delay
         status, response_text = await self.aio_get(url=self.item.furl.url)
-
-        save_html_response(f"{self.item.id}_stock-check", status, response_text)
+        #Cut out html 200 page saves
+        if (status != 200):
+            save_html_response(f"{self.item.id}_stock-check", status, response_text)
 
         # do this after each request
         fail_counter = check_fail(status=status, fail_counter=fail_counter)
@@ -288,7 +289,9 @@ class AmazonMonitor(aiohttp.ClientSession):
             end_time = time.time() + delay
             #log.debug(f"AMAZON URL {self.item.furl.url}")
             status, response_text = await self.aio_get(url=self.item.furl.url)
-            save_html_response(f"{self.item.id}_stock-check", status, response_text)
+            #cut out html 200 saves
+            if (status != 200):
+                save_html_response(f"{self.item.id}_stock-check", status, response_text)
             
             log.debug(f"ASIN {self.item.id} returned HTML status {status} using proxy {self.connector.proxy_url}")
 
